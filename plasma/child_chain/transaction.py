@@ -85,5 +85,10 @@ class Transaction(rlp.Serializable):
     def sender2(self):
         return get_sender(self.hash, self.sig2)
 
+    def to_dict(self):
+        d = {}
+        for name, _ in self.__class__.fields:
+            d[name] = getattr(self, name)
+        return d
 
 UnsignedTransaction = Transaction.exclude(['sig1', 'sig2'])
