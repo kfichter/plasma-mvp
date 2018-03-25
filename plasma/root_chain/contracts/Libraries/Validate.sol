@@ -1,6 +1,7 @@
 pragma solidity 0.4.18;
-import './ByteUtils.sol';
-import './ECRecovery.sol';
+
+import "./ByteUtils.sol";
+import "./ECRecovery.sol";
 
 
 library Validate {
