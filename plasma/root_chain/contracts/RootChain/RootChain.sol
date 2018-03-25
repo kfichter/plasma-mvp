@@ -46,6 +46,7 @@ contract RootChain {
     uint256 public recentBlock;
     uint256 public weekOldBlock;
     uint256 public childBlockInterval;
+    uint256 public inclusionTimeout;
 
     struct exit {
         address owner;
@@ -104,6 +105,7 @@ contract RootChain {
         currentChildBlock = childBlockInterval;
         currentDepositBlock = 1;
         weekOldBlock = 1;
+        inclusionTimeout = 2;
         exitsQueue = new PriorityQueue();
     }
 
@@ -152,28 +154,72 @@ contract RootChain {
         Deposit(txList[6].toAddress(), txList[7].toUint());
     }
 
-    // @dev Starts to exit a specified utxo
-    // @param utxoPos The position of the exiting utxo in the format of blknum * 1000000000 + index * 10000 + oindex
-    // @param txBytes The transaction being exited in RLP bytes format
-    // @param proof Proof of the exiting transactions inclusion for the block specified by utxoPos
-    // @param sigs Both transaction signatures and confirmations signatures used to verify that the exiting transaction has been confirmed
-    function startExit(uint256 utxoPos, bytes txBytes, bytes proof, bytes sigs)
+    function decodeUtxoPos(uint256 utxoPos)
         public
-        incrementOldBlocks
+        view
+        returns (uint256 blknum, uint256 txindex, uint256 oindex)
+    {
+        blknum = utxoPos / 1000000000;
+        txindex = (utxoPos % 1000000000) / 10000;
+        oindex = utxoPos - blknum * 1000000000 - txindex * 10000;
+        return (blknum, txindex, oindex);
+    }
+
+    function validateOutput(uint256 utxoPos, bytes txBytes, bytes proof, bytes sigs)
+        public
+        view
+    {
+        uint256 blknum;
+        uint256 txindex;
+        uint256 oindex;
+        (blknum, txindex, oindex) = decodeUtxoPos(utxoPos);
+        bytes32 root = childChain[blknum].root;
+
+        var txList = txBytes.toRLPItem().toList(11);
+        require(msg.sender == txList[6 + 2 * oindex].toAddress());
+        bytes32 txHash = keccak256(txBytes);
+        bytes32 merkleHash = keccak256(txHash, ByteUtils.slice(sigs, 0, 130));
+        require(Validate.checkSigs(txHash, txList[0].toUint(), txList[3].toUint(), sigs));
+        require(merkleHash.checkMembership(txindex, root, proof));
+    }
+
+    function validateOutput(uint256 blknum, uint256 txindex, uint256 oindex, bytes txBytes, bytes proof, bytes sigs)
+        public
+        view
     {
         var txList = txBytes.toRLPItem().toList(11);
-        uint256 blknum = utxoPos / 1000000000;
-        uint256 txindex = (utxoPos % 1000000000) / 10000;
-        uint256 oindex = utxoPos - blknum * 1000000000 - txindex * 10000;
         bytes32 root = childChain[blknum].root;
 
         require(msg.sender == txList[6 + 2 * oindex].toAddress());
         bytes32 txHash = keccak256(txBytes);
         bytes32 merkleHash = keccak256(txHash, ByteUtils.slice(sigs, 0, 130));
-        require(Validate.checkSigs(txHash, root, txList[0].toUint(), txList[3].toUint(), sigs));
+        require(Validate.checkSigs(txHash, txList[0].toUint(), txList[3].toUint(), sigs));
         require(merkleHash.checkMembership(txindex, root, proof));
+    }
 
-        // Priority is a given utxos position in the exit priority queue
+    function isDepositBlock(uint256 blknum)
+        public
+        view
+        returns (bool)
+    {
+        return blknum % 3 > 0;
+    }
+
+    function isOldBlock(uint256 blknum)
+        public
+        view
+        returns (bool)
+    {
+        return (currentChildBlock - blknum) / 1000 > inclusionTimeout;
+    }
+
+    function insertExit(uint256 utxoPos, address owner, uint256 amount)
+        internal
+    {
+        uint256 blknum;
+        uint256 oindex;
+        (blknum, , oindex) = decodeUtxoPos(utxoPos);
+
         uint256 priority;
         if (blknum < weekOldBlock) {
             priority = (utxoPos / blknum).mul(weekOldBlock);
@@ -184,11 +230,55 @@ contract RootChain {
         exitIds[utxoPos] = priority;
         exitsQueue.insert(priority);
         exits[priority] = exit({
-            owner: txList[6 + 2 * oindex].toAddress(),
-            amount: txList[7 + 2 * oindex].toUint(),
+            owner: owner,
+            amount: amount,
             utxoPos: utxoPos
         });
         Exit(msg.sender, utxoPos);
+    }
+
+    function validateInputs(uint256 blknum, uint256 oindex, bytes txBytes, bytes inputTxBytes1, bytes inputProof1, bytes inputSigs1, bytes inputTxBytes2, bytes inputProof2, bytes inputSigs2)
+        public
+        returns (address, uint256)
+    {
+        var txList = txBytes.toRLPItem().toList(11);
+
+        uint256 inputBlknum1 = txList[0].toUint();
+        uint256 inputBlknum2 = txList[3].toUint();
+
+        // Check if this is an "out of thin air" transaction
+        if (inputBlknum1 == 0 && inputBlknum2 == 0) {
+            require(isDepositBlock(blknum));
+        }
+        // Otherwise, check that the components are valid
+        if (inputBlknum1 > 0) {
+            require(isOldBlock(inputBlknum1));
+            validateOutput(inputBlknum1, txList[1].toUint(), txList[2].toUint(), inputTxBytes1, inputProof1, inputSigs1);
+        }
+        if (inputBlknum2 > 0) {
+            require(isOldBlock(inputBlknum2));
+            validateOutput(inputBlknum2, txList[4].toUint(), txList[5].toUint(), inputTxBytes2, inputProof2, inputSigs2);
+        }
+
+        return (txList[6 + 2 * oindex].toAddress(), txList[7 + 2 * oindex].toUint());
+    }
+
+    function startExit(uint256 utxoPos, bytes outputTxBytes, bytes outputProof, bytes outputSigs, bytes inputTxBytes1, bytes inputProof1, bytes inputSigs1, bytes inputTxBytes2, bytes inputProof2, bytes inputSigs2)
+        public
+        incrementOldBlocks
+    {
+        validateOutput(utxoPos, outputTxBytes, outputProof, outputSigs);
+
+        uint256 blknum;
+        uint256 oindex;
+        (blknum, , oindex) = decodeUtxoPos(utxoPos);
+
+        
+        address owner;
+        uint256 amount;
+        (owner, amount) = validateInputs(blknum, oindex, outputTxBytes, inputTxBytes1, inputProof1, inputSigs1, inputTxBytes2, inputProof2, inputSigs2);
+
+        insertExit(utxoPos, owner, amount);
     }
 
     // @dev Allows anyone to challenge an exiting transaction by submitting proof of a double spend on the child chain
