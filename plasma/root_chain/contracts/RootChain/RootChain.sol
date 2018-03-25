@@ -170,6 +170,14 @@ contract RootChain {
         return (blknum, txindex, oindex);
     }
 
+    function encodeUtxoPos(uint256 blknum, uint256 txindex, uint256 oindex)
+        public
+        view
+        returns (uint256 utxoPos)
+    {
+        return blknum * 1000000000 + txindex * 10000 + oindex;
+    }
+
     function isDepositBlock(uint256 blknum)
         public
         view
@@ -287,18 +295,19 @@ contract RootChain {
     // @param proof Proof of inclusion for the transaction used to challenge
     // @param sigs Signatures for the transaction used to challenge
     // @param confirmationSig The confirmation signature for the transaction used to challenge
-    function challengeExit(uint256 cUtxoPos, uint256 eUtxoPos, bytes txBytes, bytes proof, bytes sigs, bytes confirmationSig)
+    function challengeExit(uint256 cUtxoPos, uint256 eUtxoPos, bytes txBytes, bytes proof, bytes sigs)
         public
     {
+        var txList = txBytes.toRLPItem().toList(11);
+        require((encodeUtxoPos(txList[0].toUint(), txList[1].toUint(), txList[2].toUint()) == eUtxoPos) || (encodeUtxoPos(txList[3].toUint(), txList[4].toUint(), txList[5].toUint()) == eUtxoPos));
+
         uint256 txindex = (cUtxoPos % 1000000000) / 10000;
         bytes32 root = childChain[cUtxoPos / 1000000000].root;
         uint256 priority = exitIds[eUtxoPos];
         var txHash = keccak256(txBytes);
-        var confirmationHash = keccak256(txHash, root);
         var merkleHash = keccak256(txHash, sigs);
         address owner = exits[priority].owner;
 
-        require(owner == ECRecovery.recover(confirmationHash, confirmationSig));
         require(merkleHash.checkMembership(txindex, root, proof));
         delete exits[priority];
         delete exitIds[eUtxoPos];
