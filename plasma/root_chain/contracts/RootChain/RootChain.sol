@@ -133,24 +133,29 @@ contract RootChain {
         payable
     {
         require(currentDepositBlock < childBlockInterval);
+
         var txList = txBytes.toRLPItem().toList(11);
         require(txList.length == 11);
+
         for (uint256 i; i < 6; i++) {
             require(txList[i].toUint() == 0);
         }
         require(txList[7].toUint() == msg.value);
         require(txList[9].toUint() == 0);
+
         bytes32 zeroBytes;
         bytes32 root = keccak256(keccak256(txBytes), new bytes(130));
         for (i = 0; i < 16; i++) {
             root = keccak256(root, zeroBytes);
             zeroBytes = keccak256(zeroBytes, zeroBytes);
         }
+
         childChain[getDepositBlock()] = childBlock({
             root: root,
             created_at: block.timestamp
         });
         currentDepositBlock = currentDepositBlock.add(1);
+
         Deposit(txList[6].toAddress(), txList[7].toUint());
     }
 
@@ -163,38 +168,6 @@ contract RootChain {
         txindex = (utxoPos % 1000000000) / 10000;
         oindex = utxoPos - blknum * 1000000000 - txindex * 10000;
         return (blknum, txindex, oindex);
-    }
-
-    function validateOutput(uint256 utxoPos, bytes txBytes, bytes proof, bytes sigs)
-        public
-        view
-    {
-        uint256 blknum;
-        uint256 txindex;
-        uint256 oindex;
-        (blknum, txindex, oindex) = decodeUtxoPos(utxoPos);
-        bytes32 root = childChain[blknum].root;
-
-        var txList = txBytes.toRLPItem().toList(11);
-        require(msg.sender == txList[6 + 2 * oindex].toAddress());
-        bytes32 txHash = keccak256(txBytes);
-        bytes32 merkleHash = keccak256(txHash, ByteUtils.slice(sigs, 0, 130));
-        require(Validate.checkSigs(txHash, txList[0].toUint(), txList[3].toUint(), sigs));
-        require(merkleHash.checkMembership(txindex, root, proof));
-    }
-
-    function validateOutput(uint256 blknum, uint256 txindex, uint256 oindex, bytes txBytes, bytes proof, bytes sigs)
-        public
-        view
-    {
-        var txList = txBytes.toRLPItem().toList(11);
-        bytes32 root = childChain[blknum].root;
-
-        require(msg.sender == txList[6 + 2 * oindex].toAddress());
-        bytes32 txHash = keccak256(txBytes);
-        bytes32 merkleHash = keccak256(txHash, ByteUtils.slice(sigs, 0, 130));
-        require(Validate.checkSigs(txHash, txList[0].toUint(), txList[3].toUint(), sigs));
-        require(merkleHash.checkMembership(txindex, root, proof));
     }
 
     function isDepositBlock(uint256 blknum)
@@ -237,6 +210,32 @@ contract RootChain {
         Exit(msg.sender, utxoPos);
     }
 
+    function validateOutput(uint256 utxoPos, bytes txBytes, bytes proof, bytes sigs)
+        public
+        view
+    {
+        uint256 blknum;
+        uint256 txindex;
+        uint256 oindex;
+        (blknum, txindex, oindex) = decodeUtxoPos(utxoPos);
+
+        validateOutput(blknum, txindex, oindex, txBytes, proof, sigs);
+    }
+
+    function validateOutput(uint256 blknum, uint256 txindex, uint256 oindex, bytes txBytes, bytes proof, bytes sigs)
+        public
+        view
+    {
+        var txList = txBytes.toRLPItem().toList(11);
+        bytes32 root = childChain[blknum].root;
+
+        require(msg.sender == txList[6 + 2 * oindex].toAddress());
+        bytes32 txHash = keccak256(txBytes);
+        bytes32 merkleHash = keccak256(txHash, ByteUtils.slice(sigs, 0, 130));
+        require(Validate.checkSigs(txHash, txList[0].toUint(), txList[3].toUint(), sigs));
+        require(merkleHash.checkMembership(txindex, root, proof));
+    }
+
     function validateInputs(uint256 blknum, uint256 oindex, bytes txBytes, bytes inputTxBytes1, bytes inputProof1, bytes inputSigs1, bytes inputTxBytes2, bytes inputProof2, bytes inputSigs2)
         public
         returns (address, uint256)
@@ -246,11 +245,12 @@ contract RootChain {
         uint256 inputBlknum1 = txList[0].toUint();
         uint256 inputBlknum2 = txList[3].toUint();
 
-        // Check if this is an "out of thin air" transaction
+        // If this is an "out of thin air" transaction
         if (inputBlknum1 == 0 && inputBlknum2 == 0) {
             require(isDepositBlock(blknum));
         }
-        // Otherwise, check that the components are valid
+
+        // Otherwise, check that the inputs are valid
         if (inputBlknum1 > 0) {
             require(isOldBlock(inputBlknum1));
             validateOutput(inputBlknum1, txList[1].toUint(), txList[2].toUint(), inputTxBytes1, inputProof1, inputSigs1);
@@ -273,7 +273,6 @@ contract RootChain {
         uint256 oindex;
         (blknum, , oindex) = decodeUtxoPos(utxoPos);
 
-        
         address owner;
         uint256 amount;
         (owner, amount) = validateInputs(blknum, oindex, outputTxBytes, inputTxBytes1, inputProof1, inputSigs1, inputTxBytes2, inputProof2, inputSigs2);
