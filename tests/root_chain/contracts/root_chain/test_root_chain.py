@@ -343,32 +343,30 @@ def test_invalid_double_spend_challenge_should_fail(valid_exit):
 
     assert root_chain.exits(exit_utxoPos) == [to_hex_address(owner1), value_1, exit_utxoPos]
 
+def test_finalize_two_week_old_exit_should_succeed(t, valid_exit):
+    root_chain, exit_utxoPos = valid_exit
 
-'''
+    # Advance the current block.timestamp by 2 weeks and 1 second
+    week = 60 * 60 * 24 * 7
+    t.chain.head_state.timestamp += (2 * week) + 1
 
+    # Finalize exits
+    initial_balance = t.chain.head_state.get_balance(owner1)
+    root_chain.finalizeExits(sender=key2)
+    final_balance = t.chain.head_state.get_balance(owner1)
 
-def test_finalize_exits(t, u, root_chain):
-    two_weeks = 60 * 60 * 24 * 14
-    owner, value_1, key = t.a1, 100, t.k1
-    null_address = b'\x00' * 20
-    tx1 = Transaction(0, 0, 0, 0, 0, 0,
-                      owner, value_1, null_address, 0, 0)
-    tx_bytes1 = rlp.encode(tx1, UnsignedTransaction)
-    dep1_blknum = root_chain.getDepositBlock()
-    root_chain.deposit(tx_bytes1, value=value_1)
-    merkle = FixedMerkle(16, [tx1.merkle_hash], True)
-    proof = merkle.create_membership_proof(tx1.merkle_hash)
-    confirmSig1 = confirm_tx(tx1, root_chain.getChildChain(dep1_blknum)[0], key)
-    sigs = tx1.sig1 + tx1.sig2 + confirmSig1
-    exitId1 = dep1_blknum * 1000000000 + 10000 * 0 + 0
-    root_chain.startExit(exitId1, tx_bytes1, proof, sigs, sender=key)
-    t.chain.head_state.timestamp += two_weeks * 2
-    assert root_chain.exits(exitId1) == ['0x' + owner.hex(), 100, exitId1]
-    assert root_chain.exitIds(exitId1) == exitId1
-    pre_balance = t.chain.head_state.get_balance(owner)
-    root_chain.finalizeExits(sender=t.k2)
-    post_balance = t.chain.head_state.get_balance(owner)
-    assert post_balance == pre_balance + value_1
-    assert root_chain.exits(exitId1) == ['0x0000000000000000000000000000000000000000', 0, 0]
-    assert root_chain.exitIds(exitId1) == 0
-'''
+    # Check that the exit was finalized
+    assert final_balance == initial_balance + value_1
+    assert root_chain.exits(exit_utxoPos) == [to_hex_address(null_address), 0, 0]
+
+def test_finalize_new_exit_should_fail(t, valid_exit):
+    root_chain, exit_utxoPos = valid_exit
+
+    # Attempt to finalize exits
+    initial_balance = t.chain.head_state.get_balance(owner1)
+    root_chain.finalizeExits(sender=key2)
+    final_balance = t.chain.head_state.get_balance(owner1)
+
+    # Check that the exit was not finalized
+    assert final_balance == initial_balance
+    assert root_chain.exits(exit_utxoPos) == [to_hex_address(owner1), value_1, exit_utxoPos]

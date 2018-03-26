@@ -207,6 +207,7 @@ contract RootChain {
         } else {
             priority = utxoPos;
         }
+
         require(exitIds[utxoPos] == 0);
         exitIds[utxoPos] = priority;
         exitsQueue.insert(priority);
@@ -349,6 +350,7 @@ contract RootChain {
         view
         returns (address, uint256, uint256)
     {
-        return (exits[priority].owner, exits[priority].amount, exits[priority].utxoPos);
+        exit e = exits[priority];
+        return (e.owner, e.amount, e.utxoPos);
     }
 }
