@@ -1,8 +1,12 @@
-pragma solidity 0.4.18;
+pragma solidity ^0.4.18;
 
 import "./ByteUtils.sol";
 import "./ECRecovery.sol";
 
+/**
+ * @title Validate
+ * @dev <DESC>
+ */
 
 library Validate {
     function checkSigs(bytes32 txHash, uint256 blknum1, uint256 blknum2, bytes sigs)

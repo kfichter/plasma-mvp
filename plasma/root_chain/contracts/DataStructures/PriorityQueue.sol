@@ -1,6 +1,11 @@
-pragma solidity 0.4.18;
+pragma solidity ^0.4.18;
 
 import "SafeMath.sol";
+
+/**
+ * @title PriorityQueue
+ * @dev <DESC>
+ */
 
 contract PriorityQueue {
     using SafeMath for uint256;

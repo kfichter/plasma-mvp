@@ -15,7 +15,6 @@ newowner1 = b'\x8cT\xa4\xa0\x17\x9f$\x80\x1fI\xf92-\xab<\x87\xeb\x19L\x9b'
 amount1 = 200
 amount2 = 400
 
-
 @pytest.fixture
 def child_chain():
     child_chain = ChildChain(AUTHORITY, Mock())
@@ -29,9 +28,60 @@ def child_chain():
 
     return child_chain
 
+def test_submit_valid_block_should_succeed(child_chain):
+    # Sign the block
+    block = child_chain.current_block
+    block.sign(block_key)
+    block_hex = rlp.encode(block).hex()
+
+    old_block_number = child_chain.current_block_number
+
+    # Submit the block
+    child_chain.submit_block(block_hex)
+
+    # Check that the block was correctly submitted
+    assert child_chain.current_block_number == old_block_number + 1
+    assert child_chain.get_block(old_block_number) == block_hex
+
+
+def test_submit_block_without_sig_should_fail(child_chain):
+    block = child_chain.current_block
+    block_hex = rlp.encode(block).hex()
+
+    with pytest.raises(AssertionError):
+        child_chain.submit_block(block_hex)
+
+'''
+
+def test_submit_block_invalid_sig(child_chain):
+    block = child_chain.current_block
+    block.make_mutable()
+    block.sign(invalid_block_key)
+    block = rlp.encode(block).hex()
+
+    with pytest.raises(AssertionError):
+        child_chain.submit_block(block)
+
+
+def test_submit_block_invalid_tx_set(child_chain):
+    block = Block()
+    block.transaction_set = child_chain.current_block.transaction_set[:]
+    unsubmitted_tx = Transaction(0, 0, 0, 0, 0, 0, newowner1, 1234, b'\x00' * 20, 0, 0)
+    # Add an arbitrary transaction that hasn't been correctly submitted
+    block.transaction_set.append(unsubmitted_tx)
+
+    block.make_mutable()
+    block.sign(block_key)
+    block = rlp.encode(block).hex()
+
+    with pytest.raises(AssertionError):
+        child_chain.submit_block(block)
+
 
 def test_send_tx_with_sig(child_chain):
     tx3 = Transaction(1, 0, 0, 1, 1, 0, newowner1, amount2, b'\x00' * 20, 0, 0)
+
+    child_chain.current_block_number += 2
 
     # Sign the transaction
     tx3.sign1(tx_key)
@@ -72,50 +122,6 @@ def test_send_tx_double_spend(child_chain):
         child_chain.apply_transaction(rlp.encode(tx3).hex())
 
 
-def test_submit_block(child_chain):
-    block = child_chain.current_block
-    block.make_mutable()
-    block.sign(block_key)
-    block = rlp.encode(block).hex()
-
-    old_block_number = child_chain.current_block_number
-    child_chain.submit_block(block)
-    assert child_chain.current_block_number == old_block_number + 1
-
-
-def test_submit_block_no_sig(child_chain):
-    block = child_chain.current_block
-    block = rlp.encode(block).hex()
-
-    with pytest.raises(AssertionError):
-        child_chain.submit_block(block)
-
-
-def test_submit_block_invalid_sig(child_chain):
-    block = child_chain.current_block
-    block.make_mutable()
-    block.sign(invalid_block_key)
-    block = rlp.encode(block).hex()
-
-    with pytest.raises(AssertionError):
-        child_chain.submit_block(block)
-
-
-def test_submit_block_invalid_tx_set(child_chain):
-    block = Block()
-    block.transaction_set = child_chain.current_block.transaction_set[:]
-    unsubmitted_tx = Transaction(0, 0, 0, 0, 0, 0, newowner1, 1234, b'\x00' * 20, 0, 0)
-    # Add an arbitrary transaction that hasn't been correctly submitted
-    block.transaction_set.append(unsubmitted_tx)
-
-    block.make_mutable()
-    block.sign(block_key)
-    block = rlp.encode(block).hex()
-
-    with pytest.raises(AssertionError):
-        child_chain.submit_block(block)
-
-
 def test_apply_deposit(child_chain):
     sample_event = {
         'args': {
@@ -135,3 +141,5 @@ def test_apply_deposit(child_chain):
     assert child_chain.current_block_number == old_block_number + 1
     # Deposit block only contains one transaction
     assert len(child_chain.blocks[old_block_number].transaction_set) == 1
+
+'''

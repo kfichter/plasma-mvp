@@ -62,6 +62,7 @@ class ChildChain(object):
                 input_amount += transaction.amount2
             assert not spent
             assert valid_signature
+            assert (self.current_block_number - blknum) / 1000 > 2
 
         assert input_amount == output_amount
 

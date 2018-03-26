@@ -1,18 +1,16 @@
-pragma solidity 0.4.18;
+pragma solidity ^0.4.18;
 
-import "SafeMath.sol";
-import "Math.sol";
-import "RLP.sol";
-import "Merkle.sol";
-import "Validate.sol";
-import "PriorityQueue.sol";
-
+import "./SafeMath.sol";
+import "./RLP.sol";
+import "./Merkle.sol";
+import "./Validate.sol";
+import "./PriorityQueue.sol";
+import "./ByteUtils.sol";
 
 /**
  * @title RootChain
  * @dev This contract secures a utxo payments plasma child chain to ethereum
  */
-
 
 contract RootChain {
     using SafeMath for uint256;
@@ -35,15 +33,8 @@ contract RootChain {
     mapping(uint256 => uint256) public exitIds;
     PriorityQueue exitsQueue;
     address public authority;
-    /* Block numbering scheme below is needed to prevent Ethereum reorg from invalidating blocks submitted
-       by operator. Two mechanisms must be in place to prevent chain from crashing:
-       1) don't mine tx that spent fresh deposits; if they are reorged from existence, block is invalid
-       2) disappearance of submit block does not affect operator's block numbering; hence tx submitted by
-       users that address that block stay valid.
-    */
     uint256 public currentChildBlock; /* ends with 000 */
     uint256 public currentDepositBlock; /* takes values in range 1..999 */
-    uint256 public recentBlock;
     uint256 public weekOldBlock;
     uint256 public childBlockInterval;
     uint256 public inclusionTimeout;

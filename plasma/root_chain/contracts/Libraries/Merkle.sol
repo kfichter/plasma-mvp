@@ -1,5 +1,10 @@
-pragma solidity 0.4.18;
+pragma solidity ^0.4.18;
 
+
+/**
+ * @title Merkle
+ * @dev <DESC>
+ */
 
 library Merkle {
     function checkMembership(bytes32 leaf, uint256 index, bytes32 rootHash, bytes proof)
